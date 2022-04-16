@@ -119,8 +119,8 @@ class Display:
         oled.fill(0)
 
         if active_task is not None:
-            oled.text("Clock", 0, 0)
-            self.render_wrapped_text(active_task.name, 20, 30)
+            self.render_wrapped_text(active_task.name, 0, 10)
+            oled.text("Timer", 43, 30)
             oled.text("00:00:00", 30, 50)
             oled.show()
         elif selected_task_index is not None:
@@ -139,9 +139,9 @@ class Display:
 
             oled.show()
         else:
-            oled.text("clockocontrol", 10, 0)
-            oled.text("Turn the knob", 0, 20)
-            oled.text("to select a task", 0, 30)
+            oled.text("clocko:ctrl", 20, 0)
+            oled.text("Turn the knob to", 0, 20)
+            oled.text("select a task", 10, 30)
             oled.show()
 
 
