@@ -124,19 +124,18 @@ class Display:
             oled.text("00:00:00", 30, 50)
             oled.show()
         elif selected_task_index is not None:
-            oled.text("Task Selection", 0, 0)
+            oled.text("Select Task", 20, 0)
+
+            selected_task = state.tasks[selected_task_index]
+            underline_width = len(selected_task.name) * 8
+            oled.hline(0, 38, underline_width, 2)
 
             for i, task in enumerate(state.tasks):
-                if selected_task_index > 0 and i < selected_task_index - 1:
+                if i < selected_task_index - 1:
                     continue
 
-                text = f" {task.name}"
-                if i == selected_task_index:
-                    text = f"-{task.name}"
-
                 position = 30 + (i - selected_task_index) * 10
-
-                oled.text(text, 0, position)
+                oled.text(task.name, 0, position, 1)
 
             oled.show()
         else:
