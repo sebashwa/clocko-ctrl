@@ -1,13 +1,54 @@
-from machine import ADC, Pin, SoftI2C
-from time import sleep
+import network
+import json
 import ssd1306
+from machine import ADC, Pin, SoftI2C
+from time import sleep, ticks_ms, ticks_diff
 
 
-class State:
-    def __init__(self):
-        self.tasks = ClockodoTasks.all()
-        self.selected_task_index = None
-        self.active_task = None
+class Error:
+    GENERAL = "GENERAL"
+    WIFI_CONFIG = "WIFI_CONFIG"
+    WIFI_CONNECTION = "WIFI_CONNECTION"
+    CONFIG_READ = "CONFIG_READ"
+    CONFIG_PARSE = "CONFIG_PARSE"
+
+
+class Wifi:
+    CONNECTION_TIMEOUT = 10000
+    station_interface = network.WLAN(network.STA_IF)
+    access_point_interface = network.WLAN(network.AP_IF)
+    last_connect_at = None
+
+    @classmethod
+    def wait_for_connection(cls):
+        while not cls.station_interface.isconnected():
+            diff = ticks_diff(ticks_ms(), cls.last_connect_at)
+            if diff < cls.CONNECTION_TIMEOUT:
+                continue
+            else:
+                break
+
+        if not cls.station_interface.isconnected():
+            raise
+
+    @classmethod
+    def connect(cls):
+        essid = Config.wifi.essid
+        password = Config.wifi.password
+        if essid is None or password is None:
+            State.error = Error.WIFI_CONFIG
+            return
+
+        cls.station_interface.active(True)
+        cls.access_point_interface.active(False)
+
+        cls.last_connect_at = ticks_ms()
+
+        try:
+            cls.station_interface.connect(essid, password)
+            cls.wait_for_connection()
+        except:
+            State.error = Error.WIFI_CONNECTION
 
 
 class ClockodoTask:
@@ -16,70 +57,121 @@ class ClockodoTask:
         self.customer_id = customer_id
         self.name = name
 
+    @staticmethod
+    def from_json(json):
+        name = json.get("name")
+        customer_id = json.get("customer_id")
+        project_id = json.get("project_id")
 
-class ClockodoTasks:
-    def all():
-        return [
-            ClockodoTask("EDM", 1214464),
-            ClockodoTask("Moodle (EDM)", 1738188),
-            ClockodoTask("intern", None, 758500),
-            ClockodoTask("HYKIST", 1214464),
-            ClockodoTask("Dolmetsch Nothilfe", 1753410),
-            ClockodoTask("Triaphon", 1214464),
-            ClockodoTask("ZMV", 1805778),
-        ]
+        no_name = name is None
+        no_id = customer_id is None and project_id is None
+        if no_name or no_id:
+            return None
+
+        return ClockodoTask(name=name, customer_id=customer_id, project_id=project_id)
 
 
-class ClockodoClient:
-    API_KEY = "bcd38bf9222607fbf9ee97995d18c8b4"
+class WifiConfig:
+    essid = None
+    password = None
+
+
+class Config:
+    api_key = None
+    wifi = WifiConfig
+    tasks = []
+
+    @classmethod
+    def update_from_json(cls, json):
+        cls.api_key = json.get("api_key")
+        cls.wifi.essid = json.get("wifi_essid")
+        cls.wifi.password = json.get("wifi_password")
+
+        cls.tasks = []
+        config_tasks = json.get("tasks", [])
+        for task_data in config_tasks:
+            task = ClockodoTask.from_json(task_data)
+
+            if task is not None:
+                cls.tasks.append(task)
+
+
+class ConfigFile:
+    FILENAME = "config.json"
+
+    @classmethod
+    def read(cls):
+        try:
+            file = open(cls.FILENAME, "r")
+            config_json = file.read()
+            file.close()
+        except:
+            State.error = Error.CONFIG_READ
+
+        try:
+            return json.loads(config_json)
+        except:
+            State.error = Error.CONFIG_PARSE
+
+
+class State:
+    error = None
+    selected_task_index = None
+    active_task = None
 
 
 class Knob:
     MAX_ATTN_VALUE = 4095
     GPIO_PIN = 36
 
-    def __init__(self, scale=None):
-        self.poti = ADC(Pin(Knob.GPIO_PIN))
-        self.poti.atten(ADC.ATTN_11DB)
-        self.scale = scale or Knob.MAX_ATTN_VALUE
-        self.previous_value = self.value
+    poti = ADC(Pin(GPIO_PIN))
+    poti.atten(ADC.ATTN_11DB)
+    previous_value = 0
 
-    def scale_value(self, value):
-        return round((self.scale / 4095) * value)
+    @staticmethod
+    def scale_value(value):
+        scale = len(Config.tasks) - 1
+        return round((scale / 4095) * value)
 
-    @property
-    def value(self):
-        read_value = self.poti.read()
-        return self.scale_value(read_value)
+    @classmethod
+    def value(cls):
+        read_value = cls.poti.read()
+        return cls.scale_value(read_value)
 
-    def handle_turn(self, state):
-        current_value = self.value
-        previous_value = self.previous_value
+    @classmethod
+    def handle_turn(cls):
+        current_value = cls.value()
 
-        if current_value != previous_value:
-            self.previous_value = current_value
-            state.selected_task_index = current_value
+        if current_value != cls.previous_value:
+            cls.previous_value = current_value
+            State.selected_task_index = current_value
 
 
 class Button:
     GPIO_PIN = 13
+    pin = Pin(GPIO_PIN, Pin.IN)
+    previous_value = 0
 
-    def __init__(self):
-        self.pin = Pin(Button.GPIO_PIN, Pin.IN)
-        self.previous_value = 0
+    @staticmethod
+    def push_action():
+        if State.error is not None:
+            return
 
-    def handle_push(self, state):
-        current_value = self.pin.value()
+        if State.active_task:
+            State.active_task = None
+        else:
+            State.active_task = Config.tasks[State.selected_task_index]
 
-        if current_value == 1 and self.previous_value == 0:
-            self.previous_value = 1
+    @classmethod
+    def handle_push(cls):
+        current_value = cls.pin.value()
 
-            if state.active_task:
-                state.active_task = None
-            else:
-                state.active_task = state.tasks[state.selected_task_index]
+        if current_value == 1 and cls.previous_value == 0:
+            cls.previous_value = 1
+            cls.push_action()
+
         elif current_value == 0:
-            self.previous_value = 0
+            cls.previous_value = 0
 
 
 class Display:
@@ -87,74 +179,108 @@ class Display:
     SDA_PIN = 21
     WIDTH = 128
     HEIGHT = 64
-    CHAR_WIDTH = 16
+    CHAR_WIDTH = 8
+    LINE_HEIGHT = 10
+    CHARS_PER_LINE = round(WIDTH / CHAR_WIDTH)
 
-    def __init__(self):
-        scl = Pin(Display.SCL_PIN)
-        sda = Pin(Display.SDA_PIN)
-        i2c = SoftI2C(scl=scl, sda=sda)
-        self.oled = ssd1306.SSD1306_I2C(Display.WIDTH, Display.HEIGHT, i2c)
+    scl = Pin(SCL_PIN)
+    sda = Pin(SDA_PIN)
+    i2c = SoftI2C(scl=scl, sda=sda)
+    oled = ssd1306.SSD1306_I2C(WIDTH, HEIGHT, i2c)
 
     @classmethod
     def split_text_for_width(cls, text):
-        return [
-            text[i : i + cls.CHAR_WIDTH] for i in range(0, len(text), cls.CHAR_WIDTH)
-        ]
+        split_indices = range(0, len(text), cls.CHARS_PER_LINE)
+        return [text[i : i + cls.CHARS_PER_LINE] for i in split_indices]
 
-    def render_wrapped_text(self, text, start_pos=0, max_pos=None):
-        text_segments = Display.split_text_for_width(text)
+    @classmethod
+    def wrapped_text(cls, text, start_line=0, max_line=None):
+        text_segments = cls.split_text_for_width(text)
 
         for i, segment in enumerate(text_segments):
-            position = start_pos + i * 10
-            if max_pos is None or position <= max_pos:
-                self.oled.text(segment, 0, position)
+            position = (start_line + i) * cls.LINE_HEIGHT
+            if max_line is None or position <= max_line * cls.LINE_HEIGHT:
+                cls.oled.text(segment, 0, position)
             else:
                 break
 
-    def render(self, state):
-        active_task = state.active_task
-        selected_task_index = state.selected_task_index
-        oled = self.oled
+    @classmethod
+    def centered_text(cls, text, line):
+        margin_left = 0
+        text_length = len(text)
+        if text_length < cls.CHARS_PER_LINE:
+            margin_left = round((cls.WIDTH - text_length * cls.CHAR_WIDTH) / 2)
 
-        oled.fill(0)
+        cls.oled.text(text, margin_left, line * cls.LINE_HEIGHT)
 
-        if active_task is not None:
-            self.render_wrapped_text(active_task.name, 0, 10)
-            oled.text("Timer", 43, 30)
-            oled.text("00:00:00", 30, 50)
-            oled.show()
-        elif selected_task_index is not None:
-            oled.text("Select Task", 20, 0)
+    @classmethod
+    def text(cls, text, line):
+        cls.oled.text(text, 0, line * cls.LINE_HEIGHT)
 
-            selected_task = state.tasks[selected_task_index]
-            underline_width = len(selected_task.name) * 8
-            oled.hline(0, 38, underline_width, 2)
+    @classmethod
+    def render_error(cls):
+        text_for_error = {
+            Error.GENERAL: "Error!",
+            Error.WIFI_CONFIG: "WIFI config error!",
+            Error.WIFI_CONNECTION: "WIFI connection error!",
+            Error.CONFIG_READ: "Config read error!",
+            Error.CONFIG_PARSE: "Config parse error!",
+        }
 
-            for i, task in enumerate(state.tasks):
-                if i < selected_task_index - 1:
-                    continue
-
-                position = 30 + (i - selected_task_index) * 10
-                oled.text(task.name, 0, position, 1)
-
-            oled.show()
+        text = text_for_error[State.error]
+        if len(text) < cls.CHARS_PER_LINE:
+            cls.centered_text(text, 3)
         else:
-            oled.text("clocko:ctrl", 20, 0)
-            oled.text("Turn the knob to", 0, 20)
-            oled.text("select a task", 10, 30)
-            oled.show()
+            cls.wrapped_text(text, 2)
+
+        cls.oled.show()
+
+    @classmethod
+    def render(cls):
+        cls.oled.fill(0)
+
+        if State.error is not None:
+            return cls.render_error()
+
+        if State.active_task is not None:
+            cls.wrapped_text(State.active_task.name, 0, 1)
+            cls.centered_text("Timer", 3)
+            cls.centered_text("00:00:00", 5)
+        elif State.selected_task_index is not None:
+            selected_task_index = State.selected_task_index
+            cls.centered_text("Select Task", 0)
+
+            if len(Config.tasks) == 0:
+                cls.text("No tasks", 3)
+                cls.text("configured", 4)
+            else:
+                selected_task = Config.tasks[selected_task_index]
+                underline_width = len(selected_task.name) * 8
+                cls.oled.hline(0, 38, underline_width, 2)
+
+                for i, task in enumerate(Config.tasks):
+                    if i < selected_task_index - 1:
+                        continue
+
+                    line = 3 + (i - selected_task_index)
+                    cls.text(task.name, line)
+
+        else:
+            cls.centered_text("clocko:ctrl", 2)
+
+        cls.oled.show()
 
 
-state = State()
+Display.render()
 
-button = Button()
-knob = Knob(scale=len(state.tasks) - 1)
-display = Display()
+config_json = ConfigFile.read()
+Config.update_from_json(config_json)
+Wifi.connect()
 
 while True:
     sleep(0.1)
 
-    knob.handle_turn(state)
-    button.handle_push(state)
+    Knob.handle_turn()
+    Button.handle_push()
 
-    display.render(state)
+    Display.render()
