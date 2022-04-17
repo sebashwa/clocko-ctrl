@@ -119,6 +119,20 @@ class State:
     selected_task_index = None
     active_task = None
 
+    @classmethod
+    def change_for_knob_turn(cls, index_value):
+        cls.selected_task_index = index_value
+
+    @classmethod
+    def change_for_button_push(cls):
+        if cls.error is not None:
+            return
+
+        if cls.active_task:
+            cls.active_task = None
+        else:
+            cls.active_task = Config.tasks[cls.selected_task_index]
+
 
 class Knob:
     MAX_ATTN_VALUE = 4095
@@ -144,7 +158,7 @@ class Knob:
 
         if current_value != cls.previous_value:
             cls.previous_value = current_value
-            State.selected_task_index = current_value
+            State.change_for_knob_turn(current_value)
 
 
 class Button:
@@ -152,23 +166,13 @@ class Button:
     pin = Pin(GPIO_PIN, Pin.IN)
     previous_value = 0
 
-    @staticmethod
-    def push_action():
-        if State.error is not None:
-            return
-
-        if State.active_task:
-            State.active_task = None
-        else:
-            State.active_task = Config.tasks[State.selected_task_index]
-
     @classmethod
     def handle_push(cls):
         current_value = cls.pin.value()
 
         if current_value == 1 and cls.previous_value == 0:
             cls.previous_value = 1
-            cls.push_action()
+            State.change_for_button_push()
 
         elif current_value == 0:
             cls.previous_value = 0
