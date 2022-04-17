@@ -1,0 +1,9 @@
+{
+  "wifi_essid": "WIFI_ESSID",
+  "wifi_password": "WIFI_PASSWORD",
+  "api_key": "CLOCKODO_API_KEY",
+  "tasks": [
+    {"name": "Project Task Name", "project_id": 12345},
+    {"name": "Customer Task Name", "customer_id": 67890}
+  ]
+}
