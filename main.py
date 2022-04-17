@@ -1,7 +1,7 @@
 import network
+from machine import ADC, Pin, SoftI2C
 import json
 import ssd1306
-from machine import ADC, Pin, SoftI2C
 from time import sleep, ticks_ms, ticks_diff
 
 
@@ -36,8 +36,8 @@ class Error:
     WIFI_CONNECTION = "WIFI_CONNECTION"
     CONFIG_READ = "CONFIG_READ"
     CONFIG_PARSE = "CONFIG_PARSE"
-    CONFIG_NO_API_KEY = "CONFIG_NO_API_KEY"
-    CONFIG_NO_WIFI = "CONFIG_NO_WIFI"
+    CONFIG_API = "CONFIG_API"
+    CONFIG_WIFI = "CONFIG_WIFI"
 
 
 # CONFIG
@@ -93,9 +93,9 @@ class Config:
     @classmethod
     def validate(cls):
         if not cls.wifi.essid or not cls.wifi.password:
-            State.error = Error.CONFIG_NO_WIFI
-        elif not cls.api_key:
-            State.error = Error.CONFIG_NO_API_KEY
+            State.error = Error.CONFIG_WIFI
+        elif not cls.api_key or not cls.api_user:
+            State.error = Error.CONFIG_API
 
     @classmethod
     def load(cls):
@@ -263,8 +263,8 @@ class Display:
             Error.WIFI_CONNECTION: "WIFI connection error!",
             Error.CONFIG_READ: "Config read error!",
             Error.CONFIG_PARSE: "Config parse error!",
-            Error.CONFIG_NO_WIFI: "WIFI config error!",
-            Error.CONFIG_NO_API_KEY: "No API key configured!",
+            Error.CONFIG_WIFI: "WIFI config error!",
+            Error.CONFIG_API: "API credentials config error!",
         }
 
         text = text_for_error[State.error]
