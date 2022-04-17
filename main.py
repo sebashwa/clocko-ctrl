@@ -12,6 +12,7 @@ class State:
     error = None
     selected_task_index = None
     active_task = None
+    timer_started_at = None
 
     @classmethod
     def change_for_knob_turn(cls, index_value):
@@ -24,8 +25,10 @@ class State:
 
         if cls.active_task:
             cls.active_task = None
+            cls.timer_started_at = None
         else:
             cls.active_task = Config.tasks[cls.selected_task_index]
+            cls.timer_started_at = ticks_ms()
 
 
 class Error:
@@ -238,7 +241,16 @@ class Display:
             margin_left = round((cls.WIDTH - text_length * cls.CHAR_WIDTH) / 2)
 
         cls.oled.text(text, margin_left, line * cls.LINE_HEIGHT)
-    def format_time(cls, 
+
+    @staticmethod
+    def format_time(ms):
+        total_seconds = int(ms / 1000)
+        hours = int(total_seconds / 60 / 60)
+        seconds_minus_hours = total_seconds - hours * 60 * 60
+        minutes = int(seconds_minus_hours / 60)
+        seconds = seconds_minus_hours - minutes * 60
+
+        return "{:02d}:{:02d}:{:02d}".format(hours, minutes, seconds)
 
     @classmethod
     def text(cls, text, line):
@@ -270,9 +282,12 @@ class Display:
         if State.error is not None:
             return cls.render_error()
 
+        if State.active_task is not None:
+            started_since_ms = ticks_diff(ticks_ms(), State.timer_started_at)
+            text = cls.format_time(started_since_ms)
 
             cls.wrapped_text(State.active_task.name, 0, 1)
-            cls.centered_text("00:00:00", 5)
+            cls.centered_text("Timer", 3)
             cls.centered_text(text, 5)
         elif State.selected_task_index is not None:
             selected_task_index = State.selected_task_index
@@ -325,4 +340,6 @@ def main():
             run()
         except:
             State.error = Error.GENERAL
+
+
 main()
