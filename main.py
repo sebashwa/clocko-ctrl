@@ -5,12 +5,114 @@ from machine import ADC, Pin, SoftI2C
 from time import sleep, ticks_ms, ticks_diff
 
 
+# APPLICATION STATE
+
+
+class State:
+    error = None
+    selected_task_index = None
+    active_task = None
+
+    @classmethod
+    def change_for_knob_turn(cls, index_value):
+        cls.selected_task_index = index_value
+
+    @classmethod
+    def change_for_button_push(cls):
+        if cls.error is not None:
+            return
+
+        if cls.active_task:
+            cls.active_task = None
+        else:
+            cls.active_task = Config.tasks[cls.selected_task_index]
+
+
 class Error:
     GENERAL = "GENERAL"
-    WIFI_CONFIG = "WIFI_CONFIG"
     WIFI_CONNECTION = "WIFI_CONNECTION"
     CONFIG_READ = "CONFIG_READ"
     CONFIG_PARSE = "CONFIG_PARSE"
+    CONFIG_NO_API_KEY = "CONFIG_NO_API_KEY"
+    CONFIG_NO_WIFI = "CONFIG_NO_WIFI"
+
+
+# CONFIG
+
+
+class ClockodoTask:
+    def __init__(self, name, project_id=None, customer_id=None):
+        self.project_id = project_id
+        self.customer_id = customer_id
+        self.name = name
+
+    @staticmethod
+    def from_json(json):
+        name = json.get("name")
+        customer_id = json.get("customer_id")
+        project_id = json.get("project_id")
+
+        no_name = name is None
+        no_id = customer_id is None and project_id is None
+        if no_name or no_id:
+            return None
+
+        return ClockodoTask(name=name, customer_id=customer_id, project_id=project_id)
+
+
+class ConfigFile:
+    FILENAME = "config.json"
+
+    @classmethod
+    def read_and_parse(cls):
+        try:
+            file = open(cls.FILENAME, "r")
+            config_json = file.read()
+            file.close()
+        except:
+            State.error = Error.CONFIG_READ
+
+        try:
+            return json.loads(config_json)
+        except:
+            State.error = Error.CONFIG_PARSE
+
+
+class Config:
+    class Wifi:
+        essid = None
+        password = None
+
+    api_key = None
+    wifi = Wifi
+    tasks = []
+
+    @classmethod
+    def validate(cls):
+        if not cls.wifi.essid or not cls.wifi.password:
+            State.error = Error.CONFIG_NO_WIFI
+        elif not cls.api_key:
+            State.error = Error.CONFIG_NO_API_KEY
+
+    @classmethod
+    def load(cls):
+        config_json = ConfigFile.read_and_parse()
+        cls.api_key = config_json.get("api_key")
+        cls.wifi.essid = config_json.get("wifi_essid")
+        cls.wifi.password = config_json.get("wifi_password")
+
+        cls.tasks = []
+        config_tasks = config_json.get("tasks", [])
+        for task_data in config_tasks:
+            task = ClockodoTask.from_json(task_data)
+
+            if task is not None:
+                cls.tasks.append(task)
+
+        cls.validate()
+
+
+# WIFI
 
 
 class Wifi:
@@ -35,8 +137,8 @@ class Wifi:
     def connect(cls):
         essid = Config.wifi.essid
         password = Config.wifi.password
-        if essid is None or password is None:
-            State.error = Error.WIFI_CONFIG
+
+        if not essid or not password:
             return
 
         cls.station_interface.active(True)
@@ -51,87 +153,7 @@ class Wifi:
             State.error = Error.WIFI_CONNECTION
 
 
-class ClockodoTask:
-    def __init__(self, name, project_id=None, customer_id=None):
-        self.project_id = project_id
-        self.customer_id = customer_id
-        self.name = name
-
-    @staticmethod
-    def from_json(json):
-        name = json.get("name")
-        customer_id = json.get("customer_id")
-        project_id = json.get("project_id")
-
-        no_name = name is None
-        no_id = customer_id is None and project_id is None
-        if no_name or no_id:
-            return None
-
-        return ClockodoTask(name=name, customer_id=customer_id, project_id=project_id)
-
-
-class WifiConfig:
-    essid = None
-    password = None
-
-
-class Config:
-    api_key = None
-    wifi = WifiConfig
-    tasks = []
-
-    @classmethod
-    def update_from_json(cls, json):
-        cls.api_key = json.get("api_key")
-        cls.wifi.essid = json.get("wifi_essid")
-        cls.wifi.password = json.get("wifi_password")
-
-        cls.tasks = []
-        config_tasks = json.get("tasks", [])
-        for task_data in config_tasks:
-            task = ClockodoTask.from_json(task_data)
-
-            if task is not None:
-                cls.tasks.append(task)
-
-
-class ConfigFile:
-    FILENAME = "config.json"
-
-    @classmethod
-    def read(cls):
-        try:
-            file = open(cls.FILENAME, "r")
-            config_json = file.read()
-            file.close()
-        except:
-            State.error = Error.CONFIG_READ
-
-        try:
-            return json.loads(config_json)
-        except:
-            State.error = Error.CONFIG_PARSE
-
-
-class State:
-    error = None
-    selected_task_index = None
-    active_task = None
-
-    @classmethod
-    def change_for_knob_turn(cls, index_value):
-        cls.selected_task_index = index_value
-
-    @classmethod
-    def change_for_button_push(cls):
-        if cls.error is not None:
-            return
-
-        if cls.active_task:
-            cls.active_task = None
-        else:
-            cls.active_task = Config.tasks[cls.selected_task_index]
+# PERIPHERALS
 
 
 class Knob:
@@ -216,6 +238,7 @@ class Display:
             margin_left = round((cls.WIDTH - text_length * cls.CHAR_WIDTH) / 2)
 
         cls.oled.text(text, margin_left, line * cls.LINE_HEIGHT)
+    def format_time(cls, 
 
     @classmethod
     def text(cls, text, line):
@@ -225,10 +248,11 @@ class Display:
     def render_error(cls):
         text_for_error = {
             Error.GENERAL: "Error!",
-            Error.WIFI_CONFIG: "WIFI config error!",
             Error.WIFI_CONNECTION: "WIFI connection error!",
             Error.CONFIG_READ: "Config read error!",
             Error.CONFIG_PARSE: "Config parse error!",
+            Error.CONFIG_NO_WIFI: "WIFI config error!",
+            Error.CONFIG_NO_API_KEY: "No API key configured!",
         }
 
         text = text_for_error[State.error]
@@ -246,10 +270,10 @@ class Display:
         if State.error is not None:
             return cls.render_error()
 
-        if State.active_task is not None:
+
             cls.wrapped_text(State.active_task.name, 0, 1)
-            cls.centered_text("Timer", 3)
             cls.centered_text("00:00:00", 5)
+            cls.centered_text(text, 5)
         elif State.selected_task_index is not None:
             selected_task_index = State.selected_task_index
             cls.centered_text("Select Task", 0)
@@ -275,16 +299,30 @@ class Display:
         cls.oled.show()
 
 
-Display.render()
+# MAIN
 
-config_json = ConfigFile.read()
-Config.update_from_json(config_json)
-Wifi.connect()
 
-while True:
+def init():
+    Display.render()
+    Config.load()
+    Wifi.connect()
+
+
+def run():
     sleep(0.1)
 
     Knob.handle_turn()
     Button.handle_push()
 
     Display.render()
+
+
+def main():
+    init()
+
+    while True:
+        try:
+            run()
+        except:
+            State.error = Error.GENERAL
+main()
