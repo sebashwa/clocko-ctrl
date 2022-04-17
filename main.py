@@ -87,6 +87,7 @@ class Config:
         password = None
 
     api_key = None
+    api_user = None
     wifi = Wifi
     tasks = []
 
@@ -101,6 +102,7 @@ class Config:
     def load(cls):
         config_json = ConfigFile.read_and_parse()
         cls.api_key = config_json.get("api_key")
+        cls.api_user = config_json.get("api_user")
         cls.wifi.essid = config_json.get("wifi_essid")
         cls.wifi.password = config_json.get("wifi_password")
 
