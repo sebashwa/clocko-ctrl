@@ -172,14 +172,14 @@ class Knob:
     MAX_ATTN_VALUE = 4095
     GPIO_PIN = 36
 
+    scale = MAX_ATTN_VALUE
     poti = ADC(Pin(GPIO_PIN))
     poti.atten(ADC.ATTN_11DB)
     previous_value = 0
 
-    @staticmethod
-    def scale_value(value):
-        scale = len(Config.tasks) - 1
-        return round((scale / 4095) * value)
+    @classmethod
+    def scale_value(cls, value):
+        return round((cls.scale / 4095) * value)
 
     @classmethod
     def value(cls):
@@ -324,32 +324,30 @@ class Display:
         cls.oled.show()
 
 
+
+
+
+
 # MAIN
 
 
 def init():
     Display.render()
     Config.load()
+    Knob.scale = len(Config.tasks) - 1
     Wifi.connect()
-
-
-def run():
-    sleep(0.1)
-
-    Knob.handle_turn()
-    Button.handle_push()
-
-    Display.render()
 
 
 def main():
     init()
 
     while True:
-        try:
-            run()
-        except:
-            State.error = Error.GENERAL
+        Knob.handle_turn()
+        Button.handle_push()
+
+        Display.render()
+
+        sleep(0.1)
 
 
 main()
