@@ -4,7 +4,7 @@
   "api_key": "CLOCKODO_API_KEY",
   "api_user": "CLOCKODO_ACCOUNT_EMAIL",
   "tasks": [
-    {"name": "Project Task Name", "project_id": 12345},
-    {"name": "Customer Task Name", "customer_id": 67890}
+    {"name": "Project Task Name", "customer_id": 2000, "project_id": 3000},
+    {"name": "Customer Task Name", "customer_id": 4000}
   ]
 }
