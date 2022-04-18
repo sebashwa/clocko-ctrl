@@ -38,6 +38,7 @@ class Error:
     CONFIG_PARSE = "CONFIG_PARSE"
     CONFIG_API = "CONFIG_API"
     CONFIG_WIFI = "CONFIG_WIFI"
+    CONFIG_SERVICE_ID = "CONFIG_SERVICE_ID"
 
 
 # CONFIG
@@ -97,12 +98,15 @@ class Config:
             State.error = Error.CONFIG_WIFI
         elif not cls.api_key or not cls.api_user:
             State.error = Error.CONFIG_API
+        elif not cls.service_id:
+            State.error = Error.CONFIG_SERVICE_ID
 
     @classmethod
     def load(cls):
         config_json = ConfigFile.read_and_parse()
         cls.api_key = config_json.get("api_key")
         cls.api_user = config_json.get("api_user")
+        cls.service_id = config_json.get("service_id")
         cls.wifi.essid = config_json.get("wifi_essid")
         cls.wifi.password = config_json.get("wifi_password")
 
@@ -265,8 +269,9 @@ class Display:
             Error.WIFI_CONNECTION: "WIFI connection error!",
             Error.CONFIG_READ: "Config read error!",
             Error.CONFIG_PARSE: "Config parse error!",
-            Error.CONFIG_WIFI: "WIFI config error!",
-            Error.CONFIG_API: "API credentials config error!",
+            Error.CONFIG_WIFI: "Please configure WIFI credentials!",
+            Error.CONFIG_API: "Please configure API credentials!",
+            Error.CONFIG_SERVICE_ID: "Please configure a service ID!",
         }
 
         text = text_for_error[State.error]
