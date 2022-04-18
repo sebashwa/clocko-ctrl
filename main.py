@@ -1,5 +1,6 @@
 import network
 import gc
+import urequests
 from machine import ADC, Pin, SoftI2C
 import json
 import ssd1306
@@ -11,9 +12,25 @@ from time import sleep, ticks_ms, ticks_diff
 
 class State:
     error = None
+    triggered_request = None
+
     selected_task_index = None
+
     active_task = None
+    active_entry_id = None
     timer_started_at = None
+
+    @classmethod
+    def change_for_clock_start(cls, active_task, entry_id):
+        cls.active_task = active_task
+        cls.timer_started_at = ticks_ms()
+        cls.active_entry_id = entry_id
+
+    @classmethod
+    def change_for_clock_stop(cls):
+        cls.active_task = None
+        cls.timer_started_at = None
+        cls.active_entry_id = None
 
     @classmethod
     def change_for_knob_turn(cls, index_value):
@@ -22,14 +39,15 @@ class State:
     @classmethod
     def change_for_button_push(cls):
         if cls.error is not None:
+            if cls.error in [Error.API_RESPONSE, Error.API_REQUEST]:
+                cls.error = None
+
             return
 
         if cls.active_task:
-            cls.active_task = None
-            cls.timer_started_at = None
+            cls.triggered_request = ClockodoRequest.STOP_CLOCK
         else:
-            cls.active_task = Config.tasks[cls.selected_task_index]
-            cls.timer_started_at = ticks_ms()
+            cls.triggered_request = ClockodoRequest.START_CLOCK
 
 
 class Error:
@@ -40,6 +58,8 @@ class Error:
     CONFIG_API = "CONFIG_API"
     CONFIG_WIFI = "CONFIG_WIFI"
     CONFIG_SERVICE_ID = "CONFIG_SERVICE_ID"
+    API_REQUEST = "API_REQUEST"
+    API_RESPONSE = "API_RESPONSE"
 
 
 # CONFIG
@@ -271,6 +291,8 @@ class Display:
         text_for_error = {
             Error.GENERAL: "Error!",
             Error.WIFI_CONNECTION: "WIFI connection error!",
+            Error.API_REQUEST: "API request failed!",
+            Error.API_RESPONSE: "API response unsuccessful!",
             Error.CONFIG_READ: "Config read error!",
             Error.CONFIG_PARSE: "Config parse error!",
             Error.CONFIG_WIFI: "Please configure WIFI credentials!",
@@ -284,16 +306,26 @@ class Display:
         else:
             cls.wrapped_text(text, 2)
 
-        cls.oled.show()
-
     @classmethod
     def render(cls):
         cls.oled.fill(0)
 
         if State.error is not None:
-            return cls.render_error()
+            cls.render_error()
+        elif State.triggered_request is not None:
+            texts = {
+                ClockodoRequest.START_CLOCK: "Starting timer",
+                ClockodoRequest.STOP_CLOCK: "Stopping timer",
+            }
+            text = texts.get(State.triggered_request)
 
-        if State.active_task is not None:
+            dots_line = 2
+            if text is not None:
+                dots_line = 3
+                cls.centered_text(text, 2)
+
+            cls.centered_text("...", dots_line)
+        elif State.active_task is not None:
             started_since_ms = ticks_diff(ticks_ms(), State.timer_started_at)
             text = cls.format_time(started_since_ms)
 
@@ -325,8 +357,65 @@ class Display:
         cls.oled.show()
 
 
+# API INTERACTION
 
 
+class ClockodoClient:
+    BASE_URL = "https://my.clockodo.com/api/v2"
+
+    @staticmethod
+    def headers():
+        return {
+            "X-Clockodo-External-Application": "clocko:ctrl;sebashwa@mailbox.org",
+            "X-ClockodoApiUser": Config.api_user,
+            "X-ClockodoApiKey": Config.api_key,
+        }
+
+    @classmethod
+    def endpoint(cls, name):
+        return f"{cls.BASE_URL}/{name}"
+
+    @classmethod
+    def start_clock(cls, task):
+        data = {
+            "customers_id": task.customer_id,
+            "projects_id": task.project_id,
+            "services_id": Config.service_id,
+        }
+        return urequests.post(cls.endpoint("clock"), headers=cls.headers(), json=data)
+
+    @classmethod
+    def stop_clock(cls, entry_id):
+        return urequests.delete(
+            cls.endpoint(f"clock/{entry_id}"), headers=cls.headers()
+        )
+
+
+class ClockodoRequest:
+    START_CLOCK = "START_CLOCK"
+    STOP_CLOCK = "STOP_CLOCK"
+
+    @classmethod
+    def send(cls):
+        try:
+            if State.triggered_request == cls.START_CLOCK:
+                active_task = Config.tasks[State.selected_task_index]
+                response = ClockodoClient.start_clock(active_task)
+            elif State.triggered_request == cls.STOP_CLOCK:
+                response = ClockodoClient.stop_clock(State.active_entry_id)
+
+            if response.status_code == 200:
+                if State.triggered_request == cls.START_CLOCK:
+                    entry_id = response.json()["running"]["id"]
+                    State.change_for_clock_start(active_task, entry_id)
+                elif State.triggered_request == cls.STOP_CLOCK:
+                    State.change_for_clock_stop()
+            else:
+                State.error = Error.API_RESPONSE
+        except:
+            State.error = Error.API_REQUEST
+        finally:
+            State.triggered_request = None
 
 
 # MAIN
@@ -349,6 +438,8 @@ def main():
 
         Display.render()
 
+        if State.triggered_request is not None:
+            ClockodoRequest.send()
 
         gc.collect()
         sleep(0.1)
