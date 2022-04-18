@@ -198,19 +198,19 @@ class Knob:
 
 class Button:
     GPIO_PIN = 13
-    pin = Pin(GPIO_PIN, Pin.IN)
-    previous_value = 0
+    pin = Pin(GPIO_PIN, Pin.IN, Pin.PULL_UP)
+    previous_value = 1
 
     @classmethod
     def handle_push(cls):
         current_value = cls.pin.value()
 
-        if current_value == 1 and cls.previous_value == 0:
-            cls.previous_value = 1
+        if current_value == 0 and cls.previous_value == 1:
+            cls.previous_value = 0
             State.change_for_button_push()
 
-        elif current_value == 0:
-            cls.previous_value = 0
+        elif current_value == 1:
+            cls.previous_value = 1
 
 
 class Display:
