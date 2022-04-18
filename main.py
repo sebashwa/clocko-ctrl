@@ -1,4 +1,5 @@
 import network
+import gc
 from machine import ADC, Pin, SoftI2C
 import json
 import ssd1306
@@ -332,6 +333,7 @@ class Display:
 
 
 def init():
+    gc.enable()
     Display.render()
     Config.load()
     Knob.scale = len(Config.tasks) - 1
@@ -347,6 +349,8 @@ def main():
 
         Display.render()
 
+
+        gc.collect()
         sleep(0.1)
 
 
