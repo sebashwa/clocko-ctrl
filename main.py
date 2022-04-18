@@ -144,6 +144,9 @@ class Wifi:
 
     @classmethod
     def connect(cls):
+        if cls.station_interface.isconnected():
+            return
+
         essid = Config.wifi.essid
         password = Config.wifi.password
 
