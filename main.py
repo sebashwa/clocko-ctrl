@@ -247,13 +247,28 @@ class Display:
     oled = ssd1306.SSD1306_I2C(WIDTH, HEIGHT, i2c)
 
     @classmethod
-    def split_text_for_width(cls, text):
-        split_indices = range(0, len(text), cls.CHARS_PER_LINE)
-        return [text[i : i + cls.CHARS_PER_LINE] for i in split_indices]
+    def split_text_for_width(cls, text, width):
+        if len(text) == 0:
+            return text
+
+        words = text.split(" ")
+        result = [words.pop(0)]
+
+        for word in words:
+            index = len(result) - 1
+            updated_line = result[index] + f" {word}"
+
+            if len(updated_line) <= width:
+                result[index] = updated_line
+            else:
+                result.append(word)
+
+        return result
+
 
     @classmethod
     def wrapped_text(cls, text, start_line=0, max_line=None):
-        text_segments = cls.split_text_for_width(text)
+        text_segments = cls.split_text_for_width(text, cls.CHARS_PER_LINE)
 
         for i, segment in enumerate(text_segments):
             position = (start_line + i) * cls.LINE_HEIGHT
