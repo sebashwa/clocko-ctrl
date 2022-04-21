@@ -1,10 +1,11 @@
 import network
 import gc
 import urequests
-from machine import ADC, Pin, SoftI2C
+from machine import ADC, Pin, SoftI2C, Timer
 import json
 import ssd1306
 from time import sleep, ticks_ms, ticks_diff
+from render_helpers import TextFormatting, TextScrolling
 
 
 # APPLICATION STATE
@@ -204,7 +205,8 @@ class Knob:
     @classmethod
     def value(cls):
         read_value = cls.poti.read()
-        return cls.scale_value(read_value)
+        result = cls.scale_value(read_value)
+        return result
 
     @classmethod
     def handle_turn(cls):
@@ -245,30 +247,12 @@ class Display:
     sda = Pin(SDA_PIN)
     i2c = SoftI2C(scl=scl, sda=sda)
     oled = ssd1306.SSD1306_I2C(WIDTH, HEIGHT, i2c)
-
-    @classmethod
-    def split_text_for_width(cls, text, width):
-        if len(text) == 0:
-            return text
-
-        words = text.split(" ")
-        result = [words.pop(0)]
-
-        for word in words:
-            index = len(result) - 1
-            updated_line = result[index] + f" {word}"
-
-            if len(updated_line) <= width:
-                result[index] = updated_line
-            else:
-                result.append(word)
-
-        return result
+    scroll_timer = Timer(0).init(period=500, mode=Timer.PERIODIC, callback=TextScrolling.scroll)
 
 
     @classmethod
     def wrapped_text(cls, text, start_line=0, max_line=None):
-        text_segments = cls.split_text_for_width(text, cls.CHARS_PER_LINE)
+        text_segments = TextFormatting.split_for_wrapping(text, cls.CHARS_PER_LINE)
 
         for i, segment in enumerate(text_segments):
             position = (start_line + i) * cls.LINE_HEIGHT
@@ -285,16 +269,6 @@ class Display:
             margin_left = round((cls.WIDTH - text_length * cls.CHAR_WIDTH) / 2)
 
         cls.oled.text(text, margin_left, line * cls.LINE_HEIGHT)
-
-    @staticmethod
-    def format_time(ms):
-        total_seconds = int(ms / 1000)
-        hours = int(total_seconds / 60 / 60)
-        seconds_minus_hours = total_seconds - hours * 60 * 60
-        minutes = int(seconds_minus_hours / 60)
-        seconds = seconds_minus_hours - minutes * 60
-
-        return "{:02d}:{:02d}:{:02d}".format(hours, minutes, seconds)
 
     @classmethod
     def text(cls, text, line):
@@ -341,29 +315,39 @@ class Display:
             cls.centered_text("...", dots_line)
         elif State.active_task is not None:
             started_since_ms = ticks_diff(ticks_ms(), State.timer_started_at)
-            text = cls.format_time(started_since_ms)
+            timer_text = TextFormatting.format_time(started_since_ms)
 
-            cls.wrapped_text(State.active_task.name, 0, 1)
+            task_name = State.active_task.name
+            text, is_scrolling = TextScrolling.maybe_scroll(task_name, cls.CHARS_PER_LINE)
+            if is_scrolling:
+                cls.text(text, 0)
+            else:
+                cls.centered_text(text, 0)
+
+
             cls.centered_text("Timer", 3)
-            cls.centered_text(text, 5)
+            cls.centered_text(timer_text, 5)
         elif State.selected_task_index is not None:
             selected_task_index = State.selected_task_index
             cls.centered_text("Select Task", 0)
 
             if len(Config.tasks) == 0:
-                cls.text("No tasks", 3)
-                cls.text("configured", 4)
+                cls.wrapped_text("No tasks configured", 3)
             else:
-                selected_task = Config.tasks[selected_task_index]
-                underline_width = len(selected_task.name) * 8
+                task_name = Config.tasks[selected_task_index].name
+                underline_width = len(task_name) * cls.CHAR_WIDTH
                 cls.oled.hline(0, 38, underline_width, 2)
 
                 for i, task in enumerate(Config.tasks):
                     if i < selected_task_index - 1:
                         continue
 
+                    task_name = task.name
+                    if i == selected_task_index:
+                        task_name, _ = TextScrolling.maybe_scroll(task_name, cls.CHARS_PER_LINE)
+
                     line = 3 + (i - selected_task_index)
-                    cls.text(task.name, line)
+                    cls.text(task_name, line)
 
         else:
             cls.centered_text("clocko:ctrl", 2)
