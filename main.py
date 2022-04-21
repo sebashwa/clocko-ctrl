@@ -11,7 +11,7 @@ from time import sleep, ticks_ms, ticks_diff
 
 
 class State:
-    error = None
+    error: str | None = None
     triggered_request = None
 
     selected_task_index = None
@@ -94,13 +94,13 @@ class ConfigFile:
             file = open(cls.FILENAME, "r")
             config_json = file.read()
             file.close()
-        except:
-            State.error = Error.CONFIG_READ
-
-        try:
             return json.loads(config_json)
-        except:
+        except OSError:
+            State.error = Error.CONFIG_READ
+        except json.JSONDecodeError:
             State.error = Error.CONFIG_PARSE
+        return {}
+
 
 
 class Config:
@@ -150,6 +150,8 @@ class Wifi:
     station_interface = network.WLAN(network.STA_IF)
     access_point_interface = network.WLAN(network.AP_IF)
     last_connect_at = None
+    essid = None
+    password = None
 
     @classmethod
     def wait_for_connection(cls):
@@ -168,10 +170,7 @@ class Wifi:
         if cls.station_interface.isconnected():
             return
 
-        essid = Config.wifi.essid
-        password = Config.wifi.password
-
-        if not essid or not password:
+        if not cls.essid or not cls.password:
             return
 
         cls.station_interface.active(True)
@@ -180,7 +179,7 @@ class Wifi:
         cls.last_connect_at = ticks_ms()
 
         try:
-            cls.station_interface.connect(essid, password)
+            cls.station_interface.connect(cls.essid, cls.password)
             cls.wait_for_connection()
         except:
             State.error = Error.WIFI_CONNECTION
@@ -287,7 +286,7 @@ class Display:
         cls.oled.text(text, 0, line * cls.LINE_HEIGHT)
 
     @classmethod
-    def render_error(cls):
+    def render_error(cls, error):
         text_for_error = {
             Error.GENERAL: "Error!",
             Error.WIFI_CONNECTION: "WIFI connection error!",
@@ -300,7 +299,7 @@ class Display:
             Error.CONFIG_SERVICE_ID: "Please configure a service ID!",
         }
 
-        text = text_for_error[State.error]
+        text = text_for_error[error]
         if len(text) < cls.CHARS_PER_LINE:
             cls.centered_text(text, 3)
         else:
@@ -311,7 +310,7 @@ class Display:
         cls.oled.fill(0)
 
         if State.error is not None:
-            cls.render_error()
+            cls.render_error(State.error)
         elif State.triggered_request is not None:
             texts = {
                 ClockodoRequest.START_CLOCK: "Starting timer",
@@ -401,17 +400,19 @@ class ClockodoRequest:
             if State.triggered_request == cls.START_CLOCK:
                 active_task = Config.tasks[State.selected_task_index]
                 response = ClockodoClient.start_clock(active_task)
+
+                if response.status_code == 200:
+                    entry_id = response.json()["running"]["id"]
+                    State.change_for_clock_start(active_task, entry_id)
+                else:
+                    State.error = Error.API_RESPONSE
             elif State.triggered_request == cls.STOP_CLOCK:
                 response = ClockodoClient.stop_clock(State.active_entry_id)
 
-            if response.status_code == 200:
-                if State.triggered_request == cls.START_CLOCK:
-                    entry_id = response.json()["running"]["id"]
-                    State.change_for_clock_start(active_task, entry_id)
-                elif State.triggered_request == cls.STOP_CLOCK:
+                if response and response.status_code == 200:
                     State.change_for_clock_stop()
-            else:
-                State.error = Error.API_RESPONSE
+                else:
+                    State.error = Error.API_RESPONSE
         except:
             State.error = Error.API_REQUEST
         finally:
@@ -424,8 +425,13 @@ class ClockodoRequest:
 def init():
     gc.enable()
     Display.render()
+
     Config.load()
+
     Knob.scale = len(Config.tasks) - 1
+    Wifi.essid = Config.wifi.essid
+    Wifi.password = Config.wifi.password
+
     Wifi.connect()
 
 
