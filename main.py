@@ -247,7 +247,7 @@ class Display:
     sda = Pin(SDA_PIN)
     i2c = SoftI2C(scl=scl, sda=sda)
     oled = ssd1306.SSD1306_I2C(WIDTH, HEIGHT, i2c)
-    scroll_timer = Timer(0).init(period=500, mode=Timer.PERIODIC, callback=TextScrolling.scroll)
+    scroll_timer = Timer(0).init(period=500, mode=Timer.PERIODIC, callback=lambda _: TextScrolling.scroll())
 
 
     @classmethod

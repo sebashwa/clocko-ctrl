@@ -69,7 +69,7 @@ class TextScrolling:
             return len(cls.text) - cls.width
 
     @classmethod
-    def scroll(cls, _t=None):
+    def scroll(cls):
         if cls.text is None:
             return
 
