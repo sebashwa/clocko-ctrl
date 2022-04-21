@@ -217,7 +217,7 @@ class Knob:
 
 
 class Button:
-    GPIO_PIN = 13
+    GPIO_PIN = 15
     pin = Pin(GPIO_PIN, Pin.IN, Pin.PULL_UP)
     previous_value = 1
 
