@@ -37,10 +37,10 @@ For the software part only some configuration and copying of files is necessary.
 You need to configure some values for _clocko:ctrl_ to work.
 Copy `config.example.json` to `config.json` and set all values:
 
-* Wifi SSID and Password
+* Wireless network name (ESSID) and password
 * [clocko:do API credentials](https://www.clockodo.com/de/api/)
-* A service id for the activity you want to track
-* Multiple tasks you want to choose from.
+* A service ID for the activity you want to track
+* Multiple tasks you want to select from.
   This can be a combination of `customer_id` and `project_id` or just a `customer_id`.
   You can choose whatever name you want for the tasks.
 
