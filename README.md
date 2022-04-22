@@ -1,9 +1,9 @@
 # clocko:ctrl
-A hardware controller for clocko:do time tracking
+A device for [clocko:do](https://www.clockodo.com) time tracking
 
 ## Hardware
 
-The hardware part is not very complex. The controller consists of:
+The hardware part is not very complex. The device consists of:
 
 * 1 display
 * 1 knob to select a task
@@ -13,14 +13,12 @@ You can easily find tutorials on how to solder the individual components to the 
 
 ### Components
 
-I used the following components:
+I used the following:
 
 * [Olimex ESP32-WROVER-DevKit](https://www.olimex.com/Products/IoT/ESP32/ESP32-DevKit-LiPo/)
 * SSD1306 OLED Display
 * 10k Ω Potentiometer
 * Button
-
-Similar ones should work as well.
 
 ### Pins
 
@@ -29,7 +27,6 @@ These Pins are hardcoded at the moment:
 * Display: 21 for SDA, 22 for SCL
 * Potentiometer: 36
 * Button: 15 (using the internal pull up resistor)
-
 
 ## Software
 
