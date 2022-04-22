@@ -9,7 +9,7 @@ The hardware part is not very complex. The device consists of:
 * 1 knob to select a task
 * 1 button to start / stop tracking time for the selected task
 
-You can easily find tutorials on how to solder the individual components to the ESP32.
+You can easily find tutorials on how to connect the individual components to the ESP32.
 
 ### Components
 
