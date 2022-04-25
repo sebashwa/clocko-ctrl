@@ -66,26 +66,6 @@ class Error:
 # CONFIG
 
 
-class ClockodoTask:
-    def __init__(self, name, project_id=None, customer_id=None):
-        self.project_id = project_id
-        self.customer_id = customer_id
-        self.name = name
-
-    @staticmethod
-    def from_json(json):
-        name = json.get("name")
-        customer_id = json.get("customer_id")
-        project_id = json.get("project_id")
-
-        no_name = name is None
-        no_id = customer_id is None and project_id is None
-        if no_name or no_id:
-            return None
-
-        return ClockodoTask(name=name, customer_id=customer_id, project_id=project_id)
-
-
 class ConfigFile:
     FILENAME = "config.json"
 
@@ -101,7 +81,6 @@ class ConfigFile:
         except json.JSONDecodeError:
             State.error = Error.CONFIG_PARSE
         return {}
-
 
 
 class Config:
