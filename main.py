@@ -46,9 +46,9 @@ class State:
             return
 
         if cls.active_task:
-            cls.triggered_request = ClockodoRequest.STOP_CLOCK
+            cls.triggered_request = ClockodoRequest.stop_clock
         else:
-            cls.triggered_request = ClockodoRequest.START_CLOCK
+            cls.triggered_request = ClockodoRequest.start_clock
 
 
 class Error:
@@ -302,8 +302,8 @@ class Display:
             cls.render_error(State.error)
         elif State.triggered_request is not None:
             texts = {
-                ClockodoRequest.START_CLOCK: "Starting timer",
-                ClockodoRequest.STOP_CLOCK: "Stopping timer",
+                ClockodoRequest.start_clock: "Starting timer",
+                ClockodoRequest.stop_clock: "Stopping timer",
             }
             text = texts.get(State.triggered_request)
 
@@ -390,33 +390,45 @@ class ClockodoClient:
 
 
 class ClockodoRequest:
-    START_CLOCK = "START_CLOCK"
-    STOP_CLOCK = "STOP_CLOCK"
-
-    @classmethod
-    def send(cls):
+    @staticmethod
+    def send(request, on_success):
         try:
-            if State.triggered_request == cls.START_CLOCK:
-                active_task = Config.tasks[State.selected_task_index]
-                response = ClockodoClient.start_clock(active_task)
+            response = request()
 
-                if response.status_code == 200:
-                    entry_id = response.json()["running"]["id"]
-                    State.change_for_clock_start(active_task, entry_id)
-                else:
-                    State.error = Error.API_RESPONSE
-            elif State.triggered_request == cls.STOP_CLOCK:
-                response = ClockodoClient.stop_clock(State.active_entry_id)
-
-                if response and response.status_code == 200:
-                    State.change_for_clock_stop()
-                else:
-                    State.error = Error.API_RESPONSE
+            if response.status_code == 200:
+                on_success(response)
+            else:
+                State.error = Error.API_RESPONSE
         except:
             State.error = Error.API_REQUEST
         finally:
             State.triggered_request = None
 
+
+    @classmethod
+    def start_clock(cls):
+        active_task = Config.tasks[State.selected_task_index]
+
+        def request():
+            return ClockodoClient.start_clock(active_task)
+
+        def on_success(response):
+            entry_id = response.json()["running"]["id"]
+            State.change_for_clock_start(active_task, entry_id)
+
+        cls.send(request, on_success)
+
+
+
+    @classmethod
+    def stop_clock(cls):
+        def request():
+            return ClockodoClient.stop_clock(State.active_entry_id)
+
+        def on_success(_):
+            State.change_for_clock_stop()
+
+        cls.send(request, on_success)
 
 # MAIN
 
@@ -444,7 +456,7 @@ def main():
         Display.render()
 
         if State.triggered_request is not None:
-            ClockodoRequest.send()
+            State.triggered_request()
 
         gc.collect()
         sleep(0.1)
