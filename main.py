@@ -104,24 +104,22 @@ class Error:
 # CONFIG
 
 
-class ConfigFile:
-    FILENAME = "config.json"
-
-    @classmethod
-    def read_and_parse(cls):
-        try:
-            file = open(cls.FILENAME, "r")
-            config_json = file.read()
-            file.close()
-            return json.loads(config_json)
-        except OSError:
-            State.error = Error.CONFIG_READ
-        except json.JSONDecodeError:
-            State.error = Error.CONFIG_PARSE
-        return {}
-
 
 class Config:
+    class File:
+        FILENAME = "config.json"
+
+        @classmethod
+        def read_and_parse(cls):
+            try:
+                with open(cls.FILENAME) as file:
+                    return json.load(file)
+            except OSError:
+                State.error = Error.CONFIG_READ
+            except json.JSONDecodeError:
+                State.error = Error.CONFIG_PARSE
+            return {}
+
     class Wifi:
         essid = None
         password = None
@@ -142,7 +140,7 @@ class Config:
 
     @classmethod
     def load(cls):
-        config_dict = ConfigFile.read_and_parse()
+        config_dict = cls.File.read_and_parse()
         cls.api_key = config_dict.get("api_key")
         cls.api_user = config_dict.get("api_user")
         cls.service_id = config_dict.get("service_id")
