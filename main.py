@@ -79,7 +79,7 @@ class State:
     @classmethod
     def change_for_button_push(cls):
         if cls.error is not None:
-            if cls.error in [Error.API_RESPONSE, Error.API_REQUEST]:
+            if cls.error == Error.API_REQUEST:
                 cls.error = None
 
             return
@@ -99,7 +99,6 @@ class Error:
     CONFIG_WIFI = "CONFIG_WIFI"
     CONFIG_SERVICE_ID = "CONFIG_SERVICE_ID"
     API_REQUEST = "API_REQUEST"
-    API_RESPONSE = "API_RESPONSE"
 
 
 # CONFIG
@@ -299,7 +298,6 @@ class Display:
             Error.GENERAL: "Error!",
             Error.WIFI_CONNECTION: "WIFI connection error!",
             Error.API_REQUEST: "API request failed!",
-            Error.API_RESPONSE: "API response unsuccessful!",
             Error.CONFIG_READ: "Config read error!",
             Error.CONFIG_PARSE: "Config parse error!",
             Error.CONFIG_WIFI: "Please configure WIFI credentials!",
@@ -410,19 +408,25 @@ class ClockodoClient:
             cls.endpoint(f"clock/{entry_id}"), headers=cls.headers()
         )
 
+    @classmethod
+    def get_clock(cls):
+        return urequests.get(cls.endpoint("clock"), headers=cls.headers())
+
 
 class ClockodoRequest:
     @staticmethod
-    def send(request, on_success):
+    def send(request, on_success, on_failure=None):
         try:
             response = request()
 
             if response.status_code == 200:
                 on_success(response)
             else:
-                State.error = Error.API_RESPONSE
+                raise
         except:
             State.error = Error.API_REQUEST
+            if on_failure is not None:
+                on_failure()
         finally:
             State.triggered_request = None
 
@@ -449,6 +453,23 @@ class ClockodoRequest:
 
         cls.send(request, on_success)
 
+    @classmethod
+    def restore_timer(cls):
+        def request():
+            return ClockodoClient.get_clock()
+
+        def on_success(response):
+            entry_id = response.json()["running"]["id"]
+            if entry_id == State.active_entry_id:
+                return
+            else:
+                State.change_for_clock_stop()
+
+        def on_failure():
+            State.change_for_clock_stop()
+
+        cls.send(request, on_success, on_failure)
+
 
 # MAIN
 
@@ -466,6 +487,7 @@ def init():
 
     Wifi.connect()
 
+    ClockodoRequest.restore_timer()
 
 def main():
     init()
