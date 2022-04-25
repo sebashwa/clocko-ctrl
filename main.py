@@ -44,7 +44,7 @@ class State:
     @classmethod
     def load(cls):
         state_dict = cls.File.read_and_parse()
-        cls.active_task = ClockodoTask.from_dict(state_dict.get("active_task", {}))
+        cls.active_task = ClockodoTask.from_dict(state_dict.get("active_task") or {})
         cls.timer_started_at = state_dict.get("timer_started_at")
         cls.active_entry_id = state_dict.get("active_entry_id")
 
@@ -316,18 +316,7 @@ class Display:
         if State.error is not None:
             cls.render_error(State.error)
         elif State.triggered_request is not None:
-            texts = {
-                ClockodoRequest.start_clock: "Starting timer",
-                ClockodoRequest.stop_clock: "Stopping timer",
-            }
-            text = texts.get(State.triggered_request)
-
-            dots_line = 2
-            if text is not None:
-                dots_line = 3
-                cls.centered_text(text, 2)
-
-            cls.centered_text("...", dots_line)
+            cls.centered_text("...", 2)
         elif State.active_task is not None:
             started_since_ms = ticks_diff(ticks_ms(), State.timer_started_at)
             timer_text = TextFormatting.format_time(started_since_ms)
