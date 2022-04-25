@@ -457,7 +457,8 @@ class ClockodoRequest:
             return ClockodoClient.get_clock()
 
         def on_success(response):
-            entry_id = response.json()["running"]["id"]
+            running_entry = response.json()["running"]
+            entry_id = running_entry and running_entry["id"]
             if entry_id == State.active_entry_id:
                 return
             else:
@@ -466,7 +467,8 @@ class ClockodoRequest:
         def on_failure():
             State.change_for_clock_stop()
 
-        cls.send(request, on_success, on_failure)
+        if State.active_entry_id:
+            cls.send(request, on_success, on_failure)
 
 
 # MAIN
