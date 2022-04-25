@@ -5,6 +5,7 @@ from machine import ADC, Pin, SoftI2C, Timer
 import json
 import ssd1306
 from time import sleep, ticks_ms, ticks_diff
+from models import ClockodoTask
 from render_helpers import TextFormatting, TextScrolling
 
 
@@ -21,17 +22,55 @@ class State:
     active_entry_id = None
     timer_started_at = None
 
+    class File:
+        FILENAME = "state.json"
+
+        @classmethod
+        def read_and_parse(cls):
+            try:
+                with open(cls.FILENAME) as file:
+                    return json.load(file)
+            except:
+                return {}
+
+        @classmethod
+        def save_dict(cls, d):
+            try:
+                with open(cls.FILENAME, "w") as file:
+                    json.dump(d, file)
+            except:
+                pass
+
+    @classmethod
+    def load(cls):
+        state_dict = cls.File.read_and_parse()
+        cls.active_task = ClockodoTask.from_dict(state_dict.get("active_task", {}))
+        cls.timer_started_at = state_dict.get("timer_started_at")
+        cls.active_entry_id = state_dict.get("active_entry_id")
+
+    @classmethod
+    def save_to_file(cls):
+        data = {
+            "active_task": cls.active_task and cls.active_task.__dict__,
+            "timer_started_at": cls.timer_started_at,
+            "active_entry_id": cls.active_entry_id,
+        }
+
+        cls.File.save_dict(data)
+
     @classmethod
     def change_for_clock_start(cls, active_task, entry_id):
         cls.active_task = active_task
         cls.timer_started_at = ticks_ms()
         cls.active_entry_id = entry_id
+        cls.save_to_file()
 
     @classmethod
     def change_for_clock_stop(cls):
         cls.active_task = None
         cls.timer_started_at = None
         cls.active_entry_id = None
+        cls.save_to_file()
 
     @classmethod
     def change_for_knob_turn(cls, index_value):
@@ -104,17 +143,17 @@ class Config:
 
     @classmethod
     def load(cls):
-        config_json = ConfigFile.read_and_parse()
-        cls.api_key = config_json.get("api_key")
-        cls.api_user = config_json.get("api_user")
-        cls.service_id = config_json.get("service_id")
-        cls.wifi.essid = config_json.get("wifi_essid")
-        cls.wifi.password = config_json.get("wifi_password")
+        config_dict = ConfigFile.read_and_parse()
+        cls.api_key = config_dict.get("api_key")
+        cls.api_user = config_dict.get("api_user")
+        cls.service_id = config_dict.get("service_id")
+        cls.wifi.essid = config_dict.get("wifi_essid")
+        cls.wifi.password = config_dict.get("wifi_password")
 
         cls.tasks = []
-        config_tasks = config_json.get("tasks", [])
+        config_tasks = config_dict.get("tasks", [])
         for task_data in config_tasks:
-            task = ClockodoTask.from_json(task_data)
+            task = ClockodoTask.from_dict(task_data)
 
             if task is not None:
                 cls.tasks.append(task)
@@ -226,8 +265,9 @@ class Display:
     sda = Pin(SDA_PIN)
     i2c = SoftI2C(scl=scl, sda=sda)
     oled = ssd1306.SSD1306_I2C(WIDTH, HEIGHT, i2c)
-    scroll_timer = Timer(0).init(period=500, mode=Timer.PERIODIC, callback=lambda _: TextScrolling.scroll())
-
+    scroll_timer = Timer(0).init(
+        period=500, mode=Timer.PERIODIC, callback=lambda _: TextScrolling.scroll()
+    )
 
     @classmethod
     def wrapped_text(cls, text, start_line=0, max_line=None):
@@ -297,12 +337,13 @@ class Display:
             timer_text = TextFormatting.format_time(started_since_ms)
 
             task_name = State.active_task.name
-            text, is_scrolling = TextScrolling.maybe_scroll(task_name, cls.CHARS_PER_LINE)
+            text, is_scrolling = TextScrolling.maybe_scroll(
+                task_name, cls.CHARS_PER_LINE
+            )
             if is_scrolling:
                 cls.text(text, 0)
             else:
                 cls.centered_text(text, 0)
-
 
             cls.centered_text("Timer", 3)
             cls.centered_text(timer_text, 5)
@@ -323,7 +364,9 @@ class Display:
 
                     task_name = task.name
                     if i == selected_task_index:
-                        task_name, _ = TextScrolling.maybe_scroll(task_name, cls.CHARS_PER_LINE)
+                        task_name, _ = TextScrolling.maybe_scroll(
+                            task_name, cls.CHARS_PER_LINE
+                        )
 
                     line = 3 + (i - selected_task_index)
                     cls.text(task_name, line)
@@ -383,7 +426,6 @@ class ClockodoRequest:
         finally:
             State.triggered_request = None
 
-
     @classmethod
     def start_clock(cls):
         active_task = Config.tasks[State.selected_task_index]
@@ -397,8 +439,6 @@ class ClockodoRequest:
 
         cls.send(request, on_success)
 
-
-
     @classmethod
     def stop_clock(cls):
         def request():
@@ -409,6 +449,7 @@ class ClockodoRequest:
 
         cls.send(request, on_success)
 
+
 # MAIN
 
 
@@ -417,6 +458,7 @@ def init():
     Display.render()
 
     Config.load()
+    State.load()
 
     Knob.scale = len(Config.tasks) - 1
     Wifi.essid = Config.wifi.essid
