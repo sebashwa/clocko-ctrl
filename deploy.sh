@@ -3,7 +3,7 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-files=("config.json" "main.py" "render_helpers.py" "models.py" "ssd1306")
+files=("config.json" "main.py" "render_helpers.py" "models.py" "ssd1306.py")
 port=${1:-}
 
 if [[ -z "$port" ]]; then
