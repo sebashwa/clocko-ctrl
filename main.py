@@ -1,10 +1,12 @@
+import re
+import ntptime
 import network
 import gc
 import urequests
 from machine import ADC, Pin, SoftI2C, Timer
 import json
 import ssd1306
-from time import sleep, ticks_ms, ticks_diff
+from time import localtime, mktime, gmtime, sleep, ticks_ms, ticks_diff
 from models import ClockodoTask
 from render_helpers import TextFormatting, TextScrolling
 
@@ -20,19 +22,19 @@ class State:
 
     active_task = None
     active_entry_id = None
-    timer_started_at = None
+    timer_started_at: int | None = None
 
     @classmethod
-    def change_for_clock_start(cls, active_task, entry_id):
+    def change_for_clock_start(cls, active_task, entry_id, timer_started_at):
         cls.active_task = active_task
-        cls.timer_started_at = ticks_ms()
         cls.active_entry_id = entry_id
+        cls.timer_started_at = timer_started_at
 
     @classmethod
     def change_for_clock_stop(cls):
         cls.active_task = None
-        cls.timer_started_at = None
         cls.active_entry_id = None
+        cls.timer_started_at = None
 
     @classmethod
     def change_for_knob_turn(cls, index_value):
@@ -64,7 +66,6 @@ class Error:
 
 
 # CONFIG
-
 
 
 class Config:
@@ -275,13 +276,14 @@ class Display:
     def render(cls):
         cls.oled.fill(0)
 
-        if State.error is not None:
+        if State.error:
             cls.render_error(State.error)
-        elif State.triggered_request is not None:
+        elif State.triggered_request:
             cls.centered_text("...", 2)
-        elif State.active_task is not None:
-            started_since_ms = ticks_diff(ticks_ms(), State.timer_started_at)
-            timer_text = TextFormatting.format_time(started_since_ms)
+        elif State.active_task and State.timer_started_at:
+            now = mktime(gmtime())
+            seconds_elapsed = now - State.timer_started_at
+            timer_text = TextFormatting.format_time(seconds_elapsed)
 
             task_name = State.active_task.name
             text, is_scrolling = TextScrolling.maybe_scroll(
@@ -364,7 +366,7 @@ class ClockodoClient:
 
 class ClockodoRequest:
     @staticmethod
-    def send(request, on_success, on_failure=None):
+    def send(request, on_success):
         try:
             response = request()
 
@@ -374,8 +376,6 @@ class ClockodoRequest:
                 raise
         except:
             State.error = Error.API_REQUEST
-            if on_failure is not None:
-                on_failure()
         finally:
             State.triggered_request = None
 
@@ -388,7 +388,8 @@ class ClockodoRequest:
 
         def on_success(response):
             entry_id = response.json()["running"]["id"]
-            State.change_for_clock_start(active_task, entry_id)
+            now = mktime(gmtime())
+            State.change_for_clock_start(active_task, entry_id, now)
 
         cls.send(request, on_success)
 
@@ -409,17 +410,35 @@ class ClockodoRequest:
 
         def on_success(response):
             running_entry = response.json()["running"]
-            entry_id = running_entry and running_entry["id"]
-            if entry_id == State.active_entry_id:
+            if not running_entry:
                 return
-            else:
-                State.change_for_clock_stop()
 
-        def on_failure():
-            State.change_for_clock_stop()
+            active_entry_id = running_entry["id"]
+            active_task = None
+            for task in Config.tasks:
+                if (
+                    task.project_id == running_entry["projects_id"]
+                    and task.customer_id == running_entry["customers_id"]
+                ):
+                    active_task = task
+                    break
 
-        if State.active_entry_id:
-            cls.send(request, on_success, on_failure)
+            start_time_str = running_entry["time_since"]
+            datetime_regexp ="(\d\d\d\d)-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)"
+            result = re.search(datetime_regexp , start_time_str)
+            timer_started_at = None
+
+            if result:
+                try:
+                    t = tuple([int(result.group(i)) if i < 7 else 0 for i in range(1, 10)])
+                    timer_started_at = mktime(t)
+                except:
+                    pass
+
+            if active_entry_id and active_task and timer_started_at:
+                State.change_for_clock_start(active_task, active_entry_id, timer_started_at)
+
+        cls.send(request, on_success)
 
 
 # MAIN
@@ -436,8 +455,10 @@ def init():
     Wifi.password = Config.wifi.password
 
     Wifi.connect()
+    ntptime.settime()
 
     ClockodoRequest.restore_timer()
+
 
 def main():
     init()

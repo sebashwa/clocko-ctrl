@@ -19,10 +19,9 @@ class TextFormatting:
         return result
 
     @staticmethod
-    def format_time(ms):
-        total_seconds = int(ms / 1000)
-        hours = int(total_seconds / 60 / 60)
-        seconds_minus_hours = total_seconds - hours * 60 * 60
+    def format_time(seconds):
+        hours = int(seconds / 60 / 60)
+        seconds_minus_hours = seconds - hours * 60 * 60
         minutes = int(seconds_minus_hours / 60)
         seconds = seconds_minus_hours - minutes * 60
 
