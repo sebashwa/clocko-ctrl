@@ -1,6 +1,8 @@
 # clocko:ctrl
 A device for [clocko:do](https://www.clockodo.com) time tracking
 
+![clocko:ctrl in all its beauty](clocko_ctrl.webp?raw=true "clocko:ctrl in all its beauty")
+
 ## Hardware
 
 The hardware part is not very complex. The device consists of:
