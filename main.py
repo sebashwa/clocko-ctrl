@@ -22,55 +22,17 @@ class State:
     active_entry_id = None
     timer_started_at = None
 
-    class File:
-        FILENAME = "state.json"
-
-        @classmethod
-        def read_and_parse(cls):
-            try:
-                with open(cls.FILENAME) as file:
-                    return json.load(file)
-            except:
-                return {}
-
-        @classmethod
-        def save_dict(cls, d):
-            try:
-                with open(cls.FILENAME, "w") as file:
-                    json.dump(d, file)
-            except:
-                pass
-
-    @classmethod
-    def load(cls):
-        state_dict = cls.File.read_and_parse()
-        cls.active_task = ClockodoTask.from_dict(state_dict.get("active_task") or {})
-        cls.timer_started_at = state_dict.get("timer_started_at")
-        cls.active_entry_id = state_dict.get("active_entry_id")
-
-    @classmethod
-    def save_to_file(cls):
-        data = {
-            "active_task": cls.active_task and cls.active_task.__dict__,
-            "timer_started_at": cls.timer_started_at,
-            "active_entry_id": cls.active_entry_id,
-        }
-
-        cls.File.save_dict(data)
-
     @classmethod
     def change_for_clock_start(cls, active_task, entry_id):
         cls.active_task = active_task
         cls.timer_started_at = ticks_ms()
         cls.active_entry_id = entry_id
-        cls.save_to_file()
 
     @classmethod
     def change_for_clock_stop(cls):
         cls.active_task = None
         cls.timer_started_at = None
         cls.active_entry_id = None
-        cls.save_to_file()
 
     @classmethod
     def change_for_knob_turn(cls, index_value):
@@ -468,7 +430,6 @@ def init():
     Display.render()
 
     Config.load()
-    State.load()
 
     Knob.scale = len(Config.tasks) - 1
     Wifi.essid = Config.wifi.essid
