@@ -276,11 +276,11 @@ class Display:
     def render(cls):
         cls.oled.fill(0)
 
-        if State.error:
+        if State.error is not None:
             cls.render_error(State.error)
-        elif State.triggered_request:
+        elif State.triggered_request is not None:
             cls.centered_text("...", 2)
-        elif State.active_task and State.timer_started_at:
+        elif State.active_task is not None and State.timer_started_at is not None:
             now = mktime(gmtime())
             seconds_elapsed = now - State.timer_started_at
             timer_text = TextFormatting.format_time(seconds_elapsed)
@@ -457,8 +457,7 @@ def init():
     Wifi.connect()
     ntptime.settime()
 
-    ClockodoRequest.restore_timer()
-
+    State.triggered_request = ClockodoRequest.restore_timer
 
 def main():
     init()
